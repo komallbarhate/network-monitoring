@@ -382,7 +382,8 @@ def create_default_admin():
         logger.info("[Bootstrap] Default viewer created: viewer / viewer123")
 
 
-if __name__ == '__main__':
+def initialize_app():
+    global rule_detector, packet_capture
     with app.app_context():
         db.create_all()
         create_default_admin()
@@ -395,20 +396,26 @@ if __name__ == '__main__':
         db.session.commit()
 
         # Initialize detectors
-        rule_detector = RuleBasedDetector(Config)
-        _refresh_blacklist()
+        if rule_detector is None:
+            rule_detector = RuleBasedDetector(Config)
+            _refresh_blacklist()
 
         # Start packet capture
-        packet_capture = PacketCapture(
-            config=Config,
-            socketio=socketio,
-            on_packet=handle_packet,
-        )
-        packet_capture.start(interface=Config.INTERFACE)
+        if packet_capture is None:
+            packet_capture = PacketCapture(
+                config=Config,
+                socketio=socketio,
+                on_packet=handle_packet,
+            )
+            packet_capture.start(interface=Config.INTERFACE)
 
         # Start stats broadcast thread
         threading.Thread(target=_periodic_stats_broadcast, daemon=True).start()
 
+# Initialize everything for WSGI (e.g., Gunicorn on Render)
+initialize_app()
+
+if __name__ == '__main__':
     logger.info("=" * 60)
     logger.info("  NetMon - Indigenous Network Monitoring System")
     logger.info("  Dashboard: http://127.0.0.1:5000")
