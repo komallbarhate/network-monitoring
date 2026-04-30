@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NetMon – Live Dashboard</title>
+  <meta name="description" content="NetMon real-time network monitoring dashboard with AI threat detection" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="/static/dashboard.css" />
+</head>
+<body>
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">🛡️</div>
+      <div class="logo-text">Net<span>Mon</span></div>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-section="overview" id="nav-overview">
+        <span class="nav-icon">📊</span><span class="nav-label">Overview</span>
+      </a>
+      <a href="#" class="nav-item" data-section="live-traffic" id="nav-live-traffic">
+        <span class="nav-icon">📡</span><span class="nav-label">Live Traffic</span>
+      </a>
+      <a href="#" class="nav-item" data-section="alerts" id="nav-alerts">
+        <span class="nav-icon">🚨</span><span class="nav-label">Alerts</span>
+        <span class="badge" id="alertBadge">0</span>
+      </a>
+      <a href="#" class="nav-item" data-section="analytics" id="nav-analytics">
+        <span class="nav-icon">📈</span><span class="nav-label">Analytics</span>
+      </a>
+      <a href="#" class="nav-item" data-section="ai-engine" id="nav-ai-engine">
+        <span class="nav-icon">🤖</span><span class="nav-label">AI Engine</span>
+      </a>
+      {% if user.is_admin() %}
+      <a href="/admin" class="nav-item" id="nav-admin">
+        <span class="nav-icon">⚙️</span><span class="nav-label">Admin Panel</span>
+      </a>
+      {% endif %}
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <div class="user-avatar">{{ user.username[0].upper() }}</div>
+        <div>
+          <div class="user-name">{{ user.username }}</div>
+          <div class="user-role {{ user.role }}">{{ user.role.upper() }}</div>
+        </div>
+      </div>
+      <a href="/logout" class="btn-logout" title="Logout">⏻</a>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <!-- Top bar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
+        <div class="breadcrumb" id="breadcrumb">Overview</div>
+      </div>
+      <div class="topbar-right">
+        <div class="capture-status" id="captureStatus">
+          <span class="pulse-dot"></span>
+          <span id="captureMode">Connecting…</span>
+        </div>
+        <div class="clock" id="clock"></div>
+      </div>
+    </header>
+
+    <!-- SECTION: Overview -->
+    <section class="section active" id="section-overview">
+      <div class="section-header">
+        <h1>Network Overview</h1>
+        <p class="section-sub">Real-time monitoring • AI threat detection active</p>
+      </div>
+
+      <!-- KPI Cards -->
+      <div class="kpi-grid">
+        <div class="kpi-card" id="kpi-packets">
+          <div class="kpi-icon">📦</div>
+          <div class="kpi-value" id="totalPackets">0</div>
+          <div class="kpi-label">Total Packets</div>
+          <div class="kpi-sub" id="ppsDisplay">0 pkt/s</div>
+        </div>
+        <div class="kpi-card danger" id="kpi-alerts">
+          <div class="kpi-icon">🚨</div>
+          <div class="kpi-value" id="totalAlerts">0</div>
+          <div class="kpi-label">Active Alerts</div>
+          <div class="kpi-sub" id="criticalAlerts">0 critical</div>
+        </div>
+        <div class="kpi-card" id="kpi-bandwidth">
+          <div class="kpi-icon">📶</div>
+          <div class="kpi-value" id="bandwidth">0</div>
+          <div class="kpi-label">Bandwidth (Mbps)</div>
+          <div class="kpi-sub" id="bytesTotal">0 MB total</div>
+        </div>
+        <div class="kpi-card ai" id="kpi-ai">
+          <div class="kpi-icon">🤖</div>
+          <div class="kpi-value" id="aiStatus">–</div>
+          <div class="kpi-label">AI Anomaly Rate</div>
+          <div class="kpi-sub" id="aiSamples">0 samples</div>
+        </div>
+      </div>
+
+      <!-- Charts row -->
+      <div class="charts-row">
+        <div class="chart-card wide">
+          <div class="chart-title">📈 Live Traffic Volume</div>
+          <canvas id="trafficChart" height="100"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">🥧 Protocol Distribution</div>
+          <canvas id="protocolChart" height="100"></canvas>
+        </div>
+      </div>
+
+      <!-- Top Talkers -->
+      <div class="card">
+        <div class="card-header">
+          <h3>🔝 Top Talkers</h3>
+          <span class="card-badge">Live</span>
+        </div>
+        <div id="topTalkersTable" class="talker-list"></div>
+      </div>
+    </section>
+
+    <!-- SECTION: Live Traffic -->
+    <section class="section" id="section-live-traffic">
+      <div class="section-header">
+        <h1>Live Packet Stream</h1>
+        <p class="section-sub">Real-time packet capture • Color-coded by threat</p>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h3>📡 Packet Feed</h3>
+          <div class="controls">
+            <label class="toggle-label">
+              <input type="checkbox" id="pauseFeed" /> Pause
+            </label>
+            <select id="filterProtocol" class="select-sm">
+              <option value="">All Protocols</option>
+              <option>TCP</option><option>UDP</option><option>ICMP</option>
+            </select>
+            <button class="btn-sm" onclick="clearPacketFeed()">Clear</button>
+          </div>
+        </div>
+        <div class="packet-feed-header">
+          <span>Timestamp</span><span>Src IP</span><span>Dst IP</span>
+          <span>Src Port</span><span>Dst Port</span><span>Proto</span>
+          <span>Size</span><span>Flags</span><span>Status</span>
+        </div>
+        <div id="packetFeed" class="packet-feed"></div>
+      </div>
+    </section>
+
+    <!-- SECTION: Alerts -->
+    <section class="section" id="section-alerts">
+      <div class="section-header">
+        <h1>Threat Alerts</h1>
+        <p class="section-sub">Detected intrusions • Severity classification</p>
+      </div>
+      <div class="filter-bar">
+        <button class="filter-btn active" onclick="filterAlerts('', this)">All</button>
+        <button class="filter-btn critical" onclick="filterAlerts('CRITICAL', this)">🔴 Critical</button>
+        <button class="filter-btn high" onclick="filterAlerts('HIGH', this)">🟠 High</button>
+        <button class="filter-btn medium" onclick="filterAlerts('MEDIUM', this)">🟡 Medium</button>
+        <button class="filter-btn low" onclick="filterAlerts('LOW', this)">🟢 Low</button>
+      </div>
+      <div id="alertsList" class="alerts-list"></div>
+      <button class="btn-load-more" onclick="loadMoreAlerts()">Load More</button>
+    </section>
+
+    <!-- SECTION: Analytics -->
+    <section class="section" id="section-analytics">
+      <div class="section-header">
+        <h1>Traffic Analytics</h1>
+        <p class="section-sub">Historical analysis • Pattern detection</p>
+      </div>
+      <div class="charts-row">
+        <div class="chart-card">
+          <div class="chart-title">🚨 Alert Types</div>
+          <canvas id="alertTypeChart" height="140"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">⚡ Severity Breakdown</div>
+          <canvas id="severityChart" height="140"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>📊 Traffic Spike History</h3></div>
+        <canvas id="spikeChart" height="80"></canvas>
+      </div>
+    </section>
+
+    <!-- SECTION: AI Engine -->
+    <section class="section" id="section-ai-engine">
+      <div class="section-header">
+        <h1>AI Anomaly Engine</h1>
+        <p class="section-sub">Isolation Forest • Unsupervised learning • Real-time inference</p>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi-card ai">
+          <div class="kpi-icon">🧠</div>
+          <div class="kpi-value" id="aiTrained">–</div>
+          <div class="kpi-label">Model Status</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon">📚</div>
+          <div class="kpi-value" id="aiBufferSize">0</div>
+          <div class="kpi-label">Training Samples</div>
+          <div class="kpi-sub" id="aiMinSamples">Min: 50</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon">📉</div>
+          <div class="kpi-value" id="aiAvgScore">0.00</div>
+          <div class="kpi-label">Avg Anomaly Score</div>
+        </div>
+        <div class="kpi-card danger">
+          <div class="kpi-icon">⚠️</div>
+          <div class="kpi-value" id="aiAnomalyRate">0%</div>
+          <div class="kpi-label">Anomaly Rate</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h3>🤖 AI Explanation</h3>
+        </div>
+        <div class="ai-explain">
+          <p>The AI engine uses <strong>Isolation Forest</strong> — an unsupervised anomaly detection algorithm that isolates observations by randomly selecting a feature and split value.</p>
+          <ul>
+            <li>📦 Features: packet size, source port, destination port, protocol, time-of-day</li>
+            <li>🔄 Auto-retrains every 5 minutes on the latest traffic window</li>
+            <li>⚠️ Anomaly score &gt; 0.65 triggers an alert</li>
+            <li>🎯 Contamination factor: 10% (expected anomaly rate)</li>
+          </ul>
+          {% if user.is_admin() %}
+          <button class="btn-primary mt" onclick="forceTrainAI()">🔁 Force Retrain Now</button>
+          <span id="trainResult" style="margin-left:12px;font-size:13px;color:#4ade80;"></span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="card">
+        <div class="chart-title">📈 Anomaly Score (Live)</div>
+        <canvas id="anomalyChart" height="100"></canvas>
+      </div>
+    </section>
+  </main>
+
+  <!-- Alert Notification Toast -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="/static/dashboard.js"></script>
+</body>
+</html>

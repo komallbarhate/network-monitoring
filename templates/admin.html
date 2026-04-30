@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NetMon – Admin Panel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/dashboard.css" />
+  <style>
+    .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+    .form-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+    .form-row input, .form-row select { flex: 1; min-width: 140px; background: rgba(255,255,255,0.04); border: 1px solid rgba(56,189,248,0.2); border-radius: 10px; padding: 10px 14px; color: #e2e8f0; font-size: 14px; font-family: 'Inter', sans-serif; outline: none; }
+    .form-row input:focus, .form-row select:focus { border-color: #38bdf8; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 10px 14px; color: #64748b; font-weight: 500; border-bottom: 1px solid rgba(56,189,248,0.1); text-transform: uppercase; letter-spacing: 0.6px; font-size: 11px; }
+    td { padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle; }
+    tr:hover td { background: rgba(56,189,248,0.04); }
+    .role-badge { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+    .role-badge.admin { background: rgba(129,140,248,0.2); color: #818cf8; }
+    .role-badge.viewer { background: rgba(56,189,248,0.15); color: #38bdf8; }
+    .btn-danger-sm { background: rgba(248,113,113,0.15); border: 1px solid rgba(248,113,113,0.3); color: #f87171; padding: 5px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; transition: all 0.2s; }
+    .btn-danger-sm:hover { background: rgba(248,113,113,0.3); }
+    .capture-controls { display: flex; gap: 12px; }
+    .stat-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 13px; }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-row span:first-child { color: #64748b; }
+    .stat-row span:last-child { font-family: 'JetBrains Mono', monospace; color: #38bdf8; }
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">🛡️</div>
+      <div class="logo-text">Net<span>Mon</span></div>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="/dashboard" class="nav-item"><span class="nav-icon">📊</span><span class="nav-label">Dashboard</span></a>
+      <a href="/admin" class="nav-item active"><span class="nav-icon">⚙️</span><span class="nav-label">Admin Panel</span></a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <div class="user-avatar">{{ user.username[0].upper() }}</div>
+        <div>
+          <div class="user-name">{{ user.username }}</div>
+          <div class="user-role admin">ADMIN</div>
+        </div>
+      </div>
+      <a href="/logout" class="btn-logout" title="Logout">⏻</a>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="breadcrumb">⚙️ Admin Panel</div>
+      </div>
+      <div class="topbar-right">
+        <div class="clock" id="clock"></div>
+      </div>
+    </header>
+
+    <div class="section active">
+      <div class="section-header">
+        <h1>Admin Control Panel</h1>
+        <p class="section-sub">Manage users, blacklists, and system settings</p>
+      </div>
+
+      <div class="admin-grid">
+        <!-- Capture Control -->
+        <div class="card">
+          <div class="card-header"><h3>📡 Capture Control</h3></div>
+          <div style="padding: 8px 0 16px;">
+            <div class="stat-row"><span>Status</span><span id="captureStatusTxt">–</span></div>
+            <div class="stat-row"><span>Mode</span><span id="captureModeTxt">–</span></div>
+            <div class="stat-row"><span>Total Packets</span><span id="adminTotalPkts">–</span></div>
+            <div class="stat-row"><span>Uptime</span><span id="adminUptime">–</span></div>
+          </div>
+          <div class="capture-controls">
+            <button class="btn-primary" onclick="startCapture()">▶ Start</button>
+            <button class="btn-secondary" onclick="stopCapture()">⏹ Stop</button>
+          </div>
+        </div>
+
+        <!-- ML Engine -->
+        <div class="card">
+          <div class="card-header"><h3>🤖 AI Engine</h3></div>
+          <div style="padding: 8px 0 16px;">
+            <div class="stat-row"><span>Trained</span><span id="adminAiTrained">–</span></div>
+            <div class="stat-row"><span>Samples</span><span id="adminAiSamples">–</span></div>
+            <div class="stat-row"><span>Anomaly Rate</span><span id="adminAiRate">–</span></div>
+            <div class="stat-row"><span>Avg Score</span><span id="adminAiScore">–</span></div>
+          </div>
+          <button class="btn-primary" onclick="forceTrainAdmin()">🔁 Force Retrain</button>
+          <span id="adminTrainMsg" style="margin-left:10px;font-size:13px;color:#4ade80;"></span>
+        </div>
+      </div>
+
+      <!-- Blacklist Management -->
+      <div class="card" style="margin-bottom:24px;">
+        <div class="card-header">
+          <h3>🚫 IP Blacklist</h3>
+          <span class="card-badge" id="blacklistCount">0 IPs</span>
+        </div>
+        <div class="form-row">
+          <input type="text" id="newBlacklistIP" placeholder="IP Address (e.g. 192.168.1.100)" />
+          <input type="text" id="newBlacklistReason" placeholder="Reason" />
+          <button class="btn-primary" onclick="addToBlacklist()">+ Add to Blacklist</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>IP Address</th><th>Reason</th><th>Added</th><th>Action</th></tr></thead>
+            <tbody id="blacklistTable"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- User Management -->
+      <div class="card">
+        <div class="card-header">
+          <h3>👥 User Management</h3>
+          <span class="card-badge" id="userCount">0 users</span>
+        </div>
+        <div class="form-row">
+          <input type="text" id="newUsername" placeholder="Username" />
+          <input type="password" id="newPassword" placeholder="Password" />
+          <input type="email" id="newEmail" placeholder="Email" />
+          <select id="newRole"><option value="viewer">Viewer</option><option value="admin">Admin</option></select>
+          <button class="btn-primary" onclick="createUser()">+ Create User</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Last Login</th><th>Action</th></tr></thead>
+            <tbody id="usersTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div class="toast-container" id="toastContainer"></div>
+  <script src="/static/admin.js"></script>
+</body>
+</html>
